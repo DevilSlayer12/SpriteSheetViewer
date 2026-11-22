@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpriteSheetViewer: animate any 2D sprite sheet in your browser</title>
+<meta name="description" content="Drop in any 2D sprite sheet. Frames are found automatically, animated instantly, and can be edited, drawn on and exported as GIF, PNG or JSON. Free, runs fully in your browser.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="./" aria-label="SpriteSheetViewer home">
+    <img src="favicon.svg" alt="" width="26" height="26">
+    <span>SpriteSheet<b>Viewer</b></span>
+  </a>
+  <nav class="actions">
+    <button id="btnOpen" class="primary" title="Open one or more sprite sheet images (O)">Open sheet</button>
+    <button id="btnNew" title="Start a blank animation and draw it yourself">New canvas</button>
+    <button id="btnDemo" title="Load a small generated example sheet">Demo</button>
+    <span class="sep"></span>
+    <button id="btnOpenProject" title="Open a saved .ssv.json project">Open project</button>
+    <button id="btnSaveProject" title="Save everything, including edits, to a project file">Save project</button>
+    <button id="btnHelp" class="icon" title="Help and shortcuts (?)">?</button>
+  </nav>
+  <input type="file" id="fileSheet" accept="image/*" multiple hidden>
+  <input type="file" id="fileProject" accept=".json,.ssv,application/json" hidden>
+</header>
+
+<main class="layout">
+  <!-- LEFT: sheet + slicing + frames -->
+  <aside class="panel left">
+    <section class="card">
+      <header class="card-h">
+        <h2>Sheet</h2>
+        <select id="sheetSelect" title="Loaded sheets"></select>
+        <button id="btnRemoveSheet" class="icon small" title="Remove this sheet and its frames">✕</button>
+      </header>
+      <div class="sheet-tools">
+        <div class="seg" role="group" aria-label="Sheet tool">
+          <button id="sheetPick" class="on" title="Click a frame to view it. Shift+click adds it to the animation.">Pick</button>
+          <button id="sheetBox" title="Drag a box on the sheet to cut out your own frame">Box</button>
+        </div>
+        <span class="grow"></span>
+        <button id="sheetZoomOut" class="icon small" title="Zoom out">−</button>
+        <button id="sheetFit" class="small" title="Fit to panel">Fit</button>
+        <button id="sheetZoomIn" class="icon small" title="Zoom in">+</button>
+      </div>
+      <div id="sheetWrap" class="sheet-wrap checker">
+        <canvas id="sheetCanvas"></canvas>
+        <div id="sheetEmpty" class="sheet-empty">No sheet loaded</div>
+      </div>
+      <div id="sheetInfo" class="hint"></div>
+    </section>
+
+    <section class="card">
+      <header class="card-h"><h2>Slicing</h2><button id="btnReslice" class="small" title="Slice the sheet again with these settings">Re-slice</button></header>
+      <label class="row">Mode
+        <select id="slMode">
+          <option value="auto">Auto detect</option>
+          <option value="islands">Separate sprites</option>
+          <option value="grid-count">Grid: columns × rows</option>
+          <option value="grid-size">Grid: cell size</option>
+        </select>
+      </label>
+      <div class="fields" data-for="grid-count">
+        <label>Columns <input id="slCols" type="number" min="1" value="4"></label>
+        <label>Rows <input id="slRows" type="number" min="1" value="1"></label>
+      </div>
+      <div class="fields" data-for="grid-size">
+        <label>Cell W <input id="slCw" type="number" min="1" value="32"></label>
+        <label>Cell H <input id="slCh" type="number" min="1" value="32"></label>
+        <label>Offset X <input id="slOx" type="number" min="0" value="0"></label>
+        <label>Offset Y <input id="slOy" type="number" min="0" value="0"></label>
+        <label>Gap X <input id="slSx" type="number" min="0" value="0"></label>
+        <label>Gap Y <input id="slSy" type="number" min="0" value="0"></label>
+      </div>
+      <div class="fields" data-for="islands auto">
+        <label title="How far apart two pieces can be and still count as one sprite">Join within (px) <input id="slGap" type="number" min="0" value="2"></label>
+        <label title="Extra space kept around each sprite">Padding (px) <input id="slPad" type="number" min="0" value="2"></label>
+      </div>
+      <details class="more">
+        <summary>More options</summary>
+        <div class="fields">
+          <label title="Pixels more opaque than this count as part of a sprite. Raise it for soft, blurry edges.">Edge cutoff <input id="slAlpha" type="number" min="0" max="254" value="32"></label>
+          <label title="Colour distance used when the sheet has a solid background">Colour tol. <input id="slTol" type="number" min="0" max="255" value="32"></label>
+          <label class="wide">Background
+            <select id="slRemoveBg">
+              <option value="auto">Auto (soft remove solid colour)</option>
+              <option value="soft">Remove: soft edges</option>
+              <option value="hard">Remove: hard edges</option>
+              <option value="off">Keep background</option>
+            </select>
+          </label>
+          <label class="wide">Animation order
+            <select id="slOrder">
+              <option value="rows">One animation per row</option>
+              <option value="columns">One animation per column</option>
+              <option value="single">Everything in one animation</option>
+              <option value="none">Don't make animations</option>
+            </select>
+          </label>
+          <label class="check wide"><input id="slSkip" type="checkbox" checked> Skip empty grid cells</label>
+        </div>
+      </details>
+      <div id="sliceNote" class="hint"></div>
+    </section>
+
+    <section class="card frames-card">
+      <header class="card-h">
+        <h2>Frames <span id="frameCount" class="count"></span></h2>
+        <button id="btnNewFrame" class="small" title="Add a blank frame you can draw on">+ Blank</button>
+      </header>
+      <div id="frameActions" class="frame-actions">
+        <button id="faView" class="small" title="View this frame on its own (V)">View</button>
+        <button id="faAdd" class="small" title="Add selected frames to the current animation (A)">Add to anim</button>
+        <button id="faPng" class="small" title="Download selected frame(s) as PNG">⤓ PNG</button>
+        <button id="faDup" class="small" title="Duplicate frame">Duplicate</button>
+        <button id="faMerge" class="small" title="Combine selected frames into one (for sprites that got split)">Merge</button>
+        <button id="faDelete" class="small danger" title="Delete selected frames">Delete</button>
+      </div>
+      <div id="frameList" class="frame-list" tabindex="0" aria-label="Frames"></div>
+      <div class="hint">Click to select, Ctrl/Shift for many, double-click to add to the animation.</div>
+    </section>
+  </aside>
+
+  <!-- CENTER: stage + playback + timeline -->
+  <section class="center">
+    <div class="stage-tabs">
+      <div class="seg" role="tablist">
+        <button id="viewAnim" class="on" role="tab">Animation</button>
+        <button id="viewFrame" role="tab">Single frame</button>
+      </div>
+      <div id="stageLabel" class="stage-label"></div>
+      <span class="grow"></span>
+      <button id="btnDraw" class="toggle" title="Draw and edit pixels (D)">✎ Draw</button>
+    </div>
+    <div id="stageWrap" class="stage-wrap">
+      <canvas id="stage"></canvas>
+      <div id="drawBar" class="drawbar" hidden>
+        <div class="seg">
+          <button data-tool="pencil" class="on" title="Pencil (B)">✏</button>
+          <button data-tool="eraser" title="Eraser (E)">⌫</button>
+          <button data-tool="fill" title="Fill (G)">◧</button>
+          <button data-tool="picker" title="Pick colour (I)">⊙</button>
+        </div>
+        <input id="drawColor" type="color" value="#000000" title="Colour">
+        <label class="mini">Size <select id="drawSize"><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></label>
+        <button id="btnUndo" class="icon small" title="Undo (Ctrl+Z)">↶</button>
+        <button id="btnRedo" class="icon small" title="Redo (Ctrl+Y)">↷</button>
+        <button id="btnClearFrame" class="small" title="Erase the whole frame">Clear</button>
+      </div>
+      <div id="empty" class="empty">
+        <div class="drop">
+          <div class="drop-art" aria-hidden="true"></div>
+          <h1>Drop a sprite sheet here</h1>
+          <p>Any size, any layout. Frames are found and animated automatically.</p>
+          <div class="drop-btns">
+            <button id="emptyOpen" class="primary">Choose image</button>
+            <button id="emptyDemo">Try the demo</button>
+            <button id="emptyNew">Draw from scratch</button>
+          </div>
+          <button id="emptyRestore" class="link" hidden>Restore your last session</button>
+        </div>
+      </div>
+    </div>
+    <div class="playbar">
+      <div class="seg">
+        <button id="pbFirst" class="icon" title="First frame (Home)">⏮</button>
+        <button id="pbPrev" class="icon" title="Previous frame (←)">◀</button>
+        <button id="pbPlay" class="icon play" title="Play / pause (Space)">▶</button>
+        <button id="pbNext" class="icon" title="Next frame (→)">▶︎</button>
+        <button id="pbLast" class="icon" title="Last frame (End)">⏭</button>
+      </div>
+      <span id="pbCounter" class="counter">0 / 0</span>
+      <label class="mini">FPS <input id="pbFps" type="range" min="1" max="60" value="10"><output id="pbFpsOut">10</output></label>
+      <span class="grow"></span>
+      <button id="pbOnion" class="toggle small" title="Onion skin: see the frames before and after (N)">Onion</button>
+      <button id="pbGrid" class="toggle small" title="Pixel grid (P)">Grid</button>
+      <button id="pbBounds" class="toggle small" title="Show frame bounds">Bounds</button>
+      <select id="pbBg" title="Stage background">
+        <option value="checker">Checker</option>
+        <option value="#14161c">Dark</option>
+        <option value="#ffffff">White</option>
+        <option value="#7fbf7f">Green</option>
+        <option value="#ff00ff">Magenta</option>
+      </select>
+      <div class="seg">
+        <button id="zoomOut" class="icon small" title="Zoom out (−)">−</button>
+        <button id="zoomFit" class="small" title="Fit (0)"><span id="zoomLabel">Fit</span></button>
+        <button id="zoomIn" class="icon small" title="Zoom in (+)">+</button>
+      </div>
+    </div>
+    <div class="timeline">
+      <div class="tl-tools">
+        <strong id="tlName">Timeline</strong>
+        <span class="grow"></span>
+        <button id="tlLeft" class="icon small" title="Move left ([)">←</button>
+        <button id="tlRight" class="icon small" title="Move right (])">→</button>
+        <button id="tlDup" class="small" title="Repeat this step (same frame)">Repeat</button>
+        <button id="tlCopy" class="small" title="Insert an editable copy of this frame after it">Copy frame</button>
+        <button id="tlReverse" class="small" title="Reverse the order">Reverse</button>
+        <button id="tlDelete" class="small danger" title="Remove from animation (Delete)">Remove</button>
+      </div>
+      <div id="tlStrip" class="tl-strip" tabindex="0" aria-label="Timeline"></div>
+    </div>
+  </section>
+
+  <!-- RIGHT: animations + properties + export -->
+  <aside class="panel right">
+    <section class="card">
+      <header class="card-h">
+        <h2>Animations</h2>
+        <button id="anNew" class="small" title="New empty animation">+ New</button>
+      </header>
+      <div id="animList" class="anim-list"></div>
+      <div id="animProps" class="fields">
+        <label class="wide">Name <input id="anName" type="text"></label>
+        <label>Loop
+          <select id="anMode"><option value="loop">Loop</option><option value="pingpong">Ping-pong</option><option value="once">Once</option></select>
+        </label>
+        <label>Align
+          <select id="anAnchor"><option value="bottom">Bottom</option><option value="center">Center</option><option value="topleft">Top-left</option></select>
+        </label>
+        <div class="btnrow wide">
+          <button id="anDup" class="small">Duplicate</button>
+          <button id="anDelete" class="small danger">Delete</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <header class="card-h"><h2>Step properties</h2><span id="stepLabel" class="count"></span></header>
+      <div id="stepProps" class="fields">
+        <label title="How many ticks this frame stays on screen">Hold <input id="spHold" type="number" min="1" max="999" value="1"></label>
+        <label title="Opacity 0 to 1">Opacity <input id="spAlpha" type="number" min="0" max="1" step="0.05" value="1"></label>
+        <label>Move X <input id="spDx" type="number" step="1" value="0"></label>
+        <label>Move Y <input id="spDy" type="number" step="1" value="0"></label>
+        <label>Scale X <input id="spSx" type="number" step="0.1" value="1"></label>
+        <label>Scale Y <input id="spSy" type="number" step="0.1" value="1"></label>
+        <label>Rotate° <input id="spRot" type="number" step="5" value="0"></label>
+        <div class="checks">
+          <label class="check"><input id="spFlipX" type="checkbox"> Flip H</label>
+          <label class="check"><input id="spFlipY" type="checkbox"> Flip V</label>
+        </div>
+        <label class="check wide" title="Smoothly move, scale, rotate and fade toward the next step across the Hold ticks"><input id="spTween" type="checkbox"> Tween to next step</label>
+        <div class="btnrow wide">
+          <button id="spApplyAll" class="small" title="Copy these settings to every step">Apply to all</button>
+          <button id="spReset" class="small">Reset</button>
+        </div>
+      </div>
+      <div class="hint">Tip: set Hold to 6, tick Tween, and change Move Y on the next step for a smooth hop.</div>
+    </section>
+
+    <section class="card">
+      <header class="card-h"><h2>Export</h2></header>
+      <div class="fields">
+        <label>Scale <select id="exScale"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></label>
+        <label>GIF bg <select id="exBg"><option value="">Transparent</option><option value="#ffffff">White</option><option value="#000000">Black</option></select></label>
+      </div>
+      <div class="export-grid">
+        <button id="exGif" class="primary">Animation GIF</button>
+        <button id="exStrip">Animation strip PNG</button>
+        <button id="exFrames">Animation frames ZIP</button>
+        <button id="exAllFrames">All frames ZIP</button>
+        <button id="exSheet">Sprite sheet + JSON</button>
+        <button id="exWebm">Video (WebM)</button>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<div id="dropOverlay" class="drop-overlay" hidden><div>Drop sprite sheets or a project file</div></div>
+
+<dialog id="dlgNew">
+  <form method="dialog">
+    <h3>New canvas</h3>
+    <p class="hint">Make an empty animation and draw every frame yourself.</p>
+    <div class="fields">
+      <label>Width <input id="nwW" type="number" min="1" max="1024" value="32"></label>
+      <label>Height <input id="nwH" type="number" min="1" max="1024" value="32"></label>
+      <label>Frames <input id="nwN" type="number" min="1" max="200" value="4"></label>
+      <label>FPS <input id="nwFps" type="number" min="1" max="60" value="8"></label>
+    </div>
+    <div class="dlg-btns">
+      <button value="cancel">Cancel</button>
+      <button id="nwOk" value="ok" class="primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgHelp">
+  <form method="dialog">
+    <h3>How it works</h3>
+    <ol class="help">
+      <li><b>Open a sheet</b> (or drag it in). Grids and loose sprites are both found automatically. If something is off, change the <b>Slicing</b> settings or use the <b>Box</b> tool to cut frames by hand.</li>
+      <li><b>View any frame</b> by clicking it on the sheet or in the Frames list, then <b>⤓ PNG</b> downloads it.</li>
+      <li><b>Build animations</b>: double-click frames to add them, drag steps in the timeline to reorder, and use Step properties to hold, move, scale, rotate, flip, fade and tween.</li>
+      <li><b>Draw</b>: press ✎ Draw to edit pixels on any frame. Use <b>Copy frame</b> to make a new frame from the current one, or <b>New canvas</b> to animate from nothing.</li>
+      <li><b>Export</b> GIFs, PNG strips, sprite sheets with JSON, frame ZIPs or video. <b>Save project</b> keeps everything for later.</li>
+    </ol>
+    <h4>Shortcuts</h4>
+    <div class="keys">
+      <span><kbd>Space</kbd> play / pause</span><span><kbd>←</kbd><kbd>→</kbd> step</span>
+      <span><kbd>D</kbd> draw mode</span><span><kbd>B</kbd><kbd>E</kbd><kbd>G</kbd><kbd>I</kbd> tools</span>
+      <span><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd> undo / redo</span><span><kbd>N</kbd> onion skin</span>
+      <span><kbd>+</kbd><kbd>−</kbd><kbd>0</kbd> zoom</span><span><kbd>V</kbd> view frame</span>
+      <span><kbd>A</kbd> add frame</span><span><kbd>Del</kbd> remove step</span>
+      <span>Mouse wheel: zoom</span><span>Right-drag: pan</span>
+    </div>
+    <p class="hint">Everything runs in your browser. Your images are never uploaded anywhere.</p>
+    <div class="dlg-btns"><button class="primary">Got it</button></div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

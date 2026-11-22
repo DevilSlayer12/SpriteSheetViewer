@@ -66,24 +66,28 @@ Everything runs in your browser. Images are never uploaded anywhere.
 
 ## Running it yourself
 
-It's a static site with no build step and no dependencies. Open `index.html` through any web server, for example:
+No install needed: download the repo and double-click `index.html`. It works straight from your computer, offline.
+
+## Editing the code
+
+The source lives in `src/` and is bundled into one small minified file, `js/app.js`, so the page loads fast and also opens from disk. After changing anything in `src/`, rebuild it:
 
 ```bash
-python3 -m http.server
+npm install
+npm run build      # or: npm run watch
 ```
-
-then visit http://localhost:8000.
 
 ## Project layout
 
 ```
 index.html        page layout
 css/style.css     styles
-js/main.js        app: state, UI, playback, drawing, exports
-js/detect.js      frame detection and background removal
-js/anim.js        animation model and rendering
-js/gif.js         GIF encoder
-js/zip.js         ZIP writer
-js/store.js       autosave
-js/demo.js        generated demo sheet
+js/app.js         bundled app (generated, don't edit by hand)
+src/main.js       app: state, UI, playback, drawing, exports
+src/detect.js     frame detection and background removal
+src/anim.js       animation model and rendering
+src/gif.js        GIF encoder
+src/zip.js        ZIP writer
+src/store.js      autosave
+src/demo.js       generated demo sheet
 ```
